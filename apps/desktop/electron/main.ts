@@ -11285,6 +11285,29 @@ function primaryProfileKey() {
   return readActiveDesktopProfile() || 'default'
 }
 
+// The legacy bare `default` route can be an alias for a named primary profile
+// after profile migration: the root state.db is a symlink (or equivalent
+// path) to profiles/<primary>/state.db. Treating that alias as a pooled local
+// profile starts a second gateway against the same SQLite store, which splits
+// session ownership between two processes. Return null when the root store is
+// genuinely independent so a real default profile remains routable.
+function legacyDefaultProfileAlias(): null | string {
+  const primary = primaryProfileKey()
+
+  if (primary === 'default') {
+    return null
+  }
+
+  try {
+    const rootStore = fs.realpathSync(path.join(HERMES_HOME, 'state.db'))
+    const primaryStore = fs.realpathSync(path.join(HERMES_HOME, 'profiles', primary, 'state.db'))
+
+    return rootStore === primaryStore ? primary : null
+  } catch {
+    return null
+  }
+}
+
 // Options describing the current connection setup for `resolveProfileBackendRoute`.
 function profileRouteOptions(profile, request?) {
   const config = readDesktopConnectionConfig()
@@ -11297,6 +11320,7 @@ function profileRouteOptions(profile, request?) {
     backendProfile: sshOverride?.remoteProfile,
     globalRemote: globalRemoteActive(),
     primaryProfile: primaryProfileKey(),
+    defaultProfileAlias: legacyDefaultProfileAlias(),
     profileRemoteOverride: Boolean(profileRemoteOverride(config, profile) || sshOverride),
     // The primary profile's own backend resolves to a remote host (its
     // per-profile override, env, or global). Unknown sub-profiles on that

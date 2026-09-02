@@ -334,6 +334,18 @@ const ROUTES = [
     expected: { backend: 'primary', descriptorProfile: null, scopePath: false }
   },
   {
+    name: 'legacy default root alias resolves to a named primary backend',
+    profile: 'default',
+    opts: { primaryProfile: 'will', defaultProfileAlias: 'will' },
+    expected: { backend: 'primary', descriptorProfile: null, scopePath: false }
+  },
+  {
+    name: 'an independent default profile still pools when the primary is named',
+    profile: 'default',
+    opts: { primaryProfile: 'will' },
+    expected: { backend: 'pool', descriptorProfile: null, scopePath: false }
+  },
+  {
     name: 'a renamed primary profile on a global remote is still scoped on the wire',
     profile: ' coder ',
     opts: { primaryProfile: 'coder', globalRemote: true },
@@ -692,6 +704,33 @@ test('resolveProfileApiRequest keeps eligible local REST on the primary backend'
     {
       backendProfile: null,
       requestPath: '/api/config?view=desktop&profile=iris'
+    }
+  )
+})
+
+test('resolveProfileApiRequest routes the legacy default alias to the named primary without a second scope', () => {
+  assert.deepEqual(
+    resolveProfileApiRequest('default', '/api/sessions', {
+      primaryProfile: 'will',
+      defaultProfileAlias: 'will',
+      globalRemote: false,
+      requestMethod: 'GET'
+    }),
+    {
+      backendProfile: null,
+      requestPath: '/api/sessions'
+    }
+  )
+  assert.deepEqual(
+    resolveProfileApiRequest('default', '/api/sessions', {
+      primaryProfile: 'will',
+      defaultProfileAlias: 'will',
+      globalRemote: true,
+      requestMethod: 'GET'
+    }),
+    {
+      backendProfile: null,
+      requestPath: '/api/sessions?profile=will'
     }
   )
 })

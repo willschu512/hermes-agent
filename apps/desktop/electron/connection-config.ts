@@ -550,6 +550,12 @@ export interface ProfileRouteOptions {
   backendProfile?: null | string
   globalRemote?: boolean
   primaryProfile?: null | string
+  /**
+   * Legacy `default` is sometimes only a root-store alias for the named
+   * primary profile. When set, route that alias to the primary instead of
+   * spawning a second backend against the same state store.
+   */
+  defaultProfileAlias?: null | string
   profileRemoteOverride?: boolean
   /** The primary profile's own backend resolves to a remote host. */
   primaryRemoteActive?: boolean
@@ -650,6 +656,13 @@ function localPrimaryRequestScope(opts: ProfileRouteOptions): boolean | null {
   return null
 }
 
+function effectiveProfileKey(profile: unknown, opts: ProfileRouteOptions = {}): null | string {
+  const requestedProfile = connectionScopeKey(profile)
+  const legacyDefaultAlias = connectionScopeKey(opts.defaultProfileAlias)
+
+  return requestedProfile === 'default' && legacyDefaultAlias ? legacyDefaultAlias : requestedProfile
+}
+
 /**
  * The one place that answers "which backend serves profile P, and does its
  * REST path need a profile scope?". Six routes, in precedence order:
@@ -673,7 +686,7 @@ function localPrimaryRequestScope(opts: ProfileRouteOptions): boolean | null {
  * reapable pool entries for backends it never owned.
  */
 function resolveProfileBackendRoute(profile, opts: ProfileRouteOptions = {}): ProfileBackendRoute {
-  const scopedProfile = connectionScopeKey(profile)
+  const scopedProfile = effectiveProfileKey(profile, opts)
   const primaryProfile = connectionScopeKey(opts.primaryProfile) || 'default'
 
   if (!scopedProfile) {
@@ -735,17 +748,18 @@ function resolveProfileBackendRoute(profile, opts: ProfileRouteOptions = {}): Pr
  * selectors such as `all` or another concrete profile retain their meaning.
  */
 function pathWithGlobalRemoteProfile(path, profile, opts: ProfileRouteOptions = {}) {
-  const translated = translateSelfProfileQuery(path, profile, opts.backendProfile)
+  const routeProfile = effectiveProfileKey(profile, opts)
+  const translated = translateSelfProfileQuery(path, routeProfile, opts.backendProfile)
 
   if (translated !== path) {
     return translated
   }
 
-  if (!resolveProfileBackendRoute(profile, opts).scopePath) {
+  if (!resolveProfileBackendRoute(routeProfile, opts).scopePath) {
     return path
   }
 
-  return pathWithProfileScope(path, profile)
+  return pathWithProfileScope(path, routeProfile)
 }
 
 /** Extra profile-valued query keys, beyond `profile`, that name the same
@@ -890,7 +904,7 @@ export interface ProfileApiRequestRoute {
  * profile query scope.
  */
 function resolveProfileApiRequest(profile, path, opts: ProfileRouteOptions = {}): ProfileApiRequestRoute {
-  const scopedProfile = connectionScopeKey(profile)
+  const scopedProfile = effectiveProfileKey(profile, opts)
   const requestPath = String(path || '')
   const routeOpts = { ...opts, requestPath }
   const route = resolveProfileBackendRoute(scopedProfile, routeOpts)
